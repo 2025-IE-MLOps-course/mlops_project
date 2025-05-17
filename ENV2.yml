@@ -1,0 +1,11 @@
+name: domain_expansion
+channels:
+  - conda-forge
+depedencies:
+  - python=3.13
+  - pip
+  -pip:
+    - argnarse
+    - pykernel
+
+
