@@ -20,8 +20,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 )
-from preprocess.preprocessing import build_preprocessing_pipeline, get_output_feature_names
-from evaluation.evaluator import evaluate_classification
+from src.preprocess.preprocessing import build_preprocessing_pipeline, get_output_feature_names, run_preprocessing_pipeline
+from src.evaluation.evaluator import evaluate_classification
 
 
 logger = logging.getLogger(__name__)
@@ -84,10 +84,9 @@ def format_metrics(metrics: dict, ndigits: int = 2) -> dict:
 
 
 def run_model_pipeline(df: pd.DataFrame, config: Dict[str, Any]):
-    """
-    Run the end-to-end model pipeline
-    TO DO
-    """
+    df = run_preprocessing_pipeline(df, config)
+    assert config["target"] in df.columns, f"{config['target']} column not found in DataFrame after preprocessing"
+
     # 1. Split data using only raw features (present in the original file)
     raw_features = config.get("raw_features", [])
     target = config["target"]
