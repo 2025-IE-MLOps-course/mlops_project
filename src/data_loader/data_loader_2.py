@@ -18,7 +18,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str = "config.yaml") -> dict:
+def load_config(config_path: str = "config2.yaml") -> dict:
     if not os.path.isfile(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path, "r") as f:
@@ -32,8 +32,6 @@ def load_env(env_path: str = ".env"):
 
 def load_data(
     path: str,
-    file_type: str = "csv",
-    sheet_name: Optional[str] = None,
     delimiter: str = ",",
     header: int = 0,
     encoding: str = "utf-8"
@@ -45,20 +43,8 @@ def load_data(
         logger.error(f"Data file does not exist: {path}")
         raise FileNotFoundError(f"Data file not found: {path}")
     try:
-        if file_type == "csv":
-            df = pd.read_csv(path, delimiter=delimiter,
-                             header=header, encoding=encoding)
-        elif file_type == "excel":
-            df = pd.read_excel(path, sheet_name=sheet_name,
-                               header=header, engine="openpyxl")
-            if isinstance(df, dict):
-                raise ValueError(
-                    "Multiple sheets detected in Excel file. Please specify a single 'sheet_name' in the configuration."
-                )
-        else:
-            logger.error(f"Unsupported file type: {file_type}")
-            raise ValueError(f"Unsupported file type: {file_type}")
-        logger.info(f"Loaded data from {path} ({file_type}), shape={df.shape}")
+        df = pd.read_csv(path, delimiter=delimiter, header=header, encoding=encoding)
+        logger.info(f"Loaded data from {path}, shape={df.shape}")
         return df
     except Exception as e:
         logger.exception(f"Failed to load data: {e}")
@@ -66,7 +52,7 @@ def load_data(
 
 
 def get_data(
-    config_path: str = "config.yaml",
+    config_path: str = "config2.yaml",
     env_path: str = ".env",
     data_stage: str = "raw"
 ) -> pd.DataFrame:
@@ -87,8 +73,6 @@ def get_data(
             f"No valid data path specified in configuration for data_stage='{data_stage}'.")
     df = load_data(
         path=path,
-        file_type=data_cfg.get("type", "csv"),
-        sheet_name=data_cfg.get("sheet_name"),
         delimiter=data_cfg.get("delimiter", ","),
         header=data_cfg.get("header", 0),
         encoding=data_cfg.get("encoding", "utf-8"),
@@ -101,8 +85,4 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     )
-    try:
-        df = get_data(data_stage="raw")
-        logging.info(f"Data loaded successfully. Shape: {df.shape}")
-    except Exception as e:
-        logging.exception(f"Failed to load data: {e}")
+    logger.setLevel(logging.INFO)  # 🔸 Ensure your logger gets configured too

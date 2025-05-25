@@ -1,0 +1,124 @@
+data_source:
+  raw_path: "/Users/eduardomartinezacha/Desktop/mymlopsproj/data/fraudTrain.csv" # Relative or absolute path to data file
+  processed_path: "data/fraudTrain.csv" # Path to save processed data
+  type: "csv"                      # Data file type: 'csv' or 'excel'
+  sheet_name: "Sheet1"             # Only used if type == 'excel'
+  delimiter: ","                   # Only used if type == 'csv'
+  header: 0                        # Row number to use as column names (0-indexed), update if needed
+  encoding: "utf-8"                # File encoding (utf-8 covers most cases)
+
+
+logging:
+  level: "INFO"
+  log_file: "./logs/main.log"
+  format: "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
+
+data_split:
+  test_size: 0.2
+  valid_size: 0.0
+  random_state: 42
+
+model:
+  active: xgboost
+
+  xgboost:
+    save_path: models/xgboost.pkl
+    params:
+      n_estimators: 100
+      max_depth: 4
+      learning_rate: 0.1
+      subsample: 0.8
+      colsample_bytree: 0.8
+      random_state: 42
+
+raw_features:
+  - amt
+  - merch_lat
+  - merch_long
+  - category
+  - gender
+  - state
+
+features:
+  continuous:
+    - amt
+    - merch_lat
+    - merch_long
+  categorical:
+    - category
+    - gender
+    - state
+  engineered:
+    - category_<one_hot>
+    - gender_<one_hot>
+    - state_<one_hot>
+
+target: is_fraud
+
+metrics:
+  - Accuracy
+  - Precision
+  - Recall
+  - F1 Score
+  - ROC AUC
+
+preprocessing:
+  drop_columns:
+    - trans_date_trans_time
+    - cc_num
+    - first
+    - last
+    - street
+    - city
+    - zip
+    - lat
+    - long
+    - job
+    - dob
+    - trans_num
+    - unix_time
+    - merchant
+    - age
+
+  one_hot_encode:
+    - category
+    - gender
+    - state
+
+artifacts:
+  metrics_path: models/metrics.json
+  preprocessing_pipeline: models/preprocessing_pipeline.pkl
+  splits_dir: data/splits
+  processed_dir: data/processed
+
+data_validation:
+  enabled: true
+  action_on_error: "raise"
+  report_path: "logs/validation_report.json"
+  schema:
+    columns:
+      - name: "amt"
+        dtype: "float"
+        required: true
+        min: 0
+      - name: "merch_lat"
+        dtype: "float"
+        required: true
+      - name: "merch_long"
+        dtype: "float"
+        required: true
+      - name: "category"
+        dtype: "str"
+        required: true
+      - name: "gender"
+        dtype: "str"
+        required: true
+        allowed_values: ["F", "M"]
+      - name: "state"
+        dtype: "str"
+        required: true
+      - name: "is_fraud"
+        dtype: "int"
+        required: true
+        allowed_values: [0, 1]

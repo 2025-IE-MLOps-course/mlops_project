@@ -1,37 +1,34 @@
 """
-Reusable, config-driven, production-quality data validation module for MLOps pipelines.
+data_validation.py
 
-- Validates data against a schema defined in the config.yaml file
-- Checks column presence, type, missing values, value ranges, and allowed sets
-- Behavior (raise or warn) is configurable; results are logged and written as JSON
+Reusable, config-driven, production-quality data validation module for MLOps pipelines.
+- Validates schema, types, missing values, ranges, allowed values
+- Validation rules are read from config.yaml under data_validation.schema
+- Behavior on validation failure is configurable (raise or warn)
+- Validation report is saved as an artifact (JSON) for reproducibility and traceability
+- Meant for initial data load to ensure quality and pipeline stability
+
+How to use (in main.py, after loading data):
+
+    from src.data_validation.data_validation import validate_data
+    validate_data(df, config)
+
+Rationale for each step is explained inline as a teaching resource.
 """
 
 import logging
 import os
 import json
 import pandas as pd
-from pathlib import Path
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-# _is_dtype_compatible
-
 
 def _is_dtype_compatible(series, expected_dtype: str) -> bool:
     """
-    Checks whether a pandas Series is compatible with the expected data type.
-
-    Args:
-        series: pandas.Series object to check
-        expected_dtype: Data type as a string ('int', 'float', 'str', 'bool')
-
-    Returns:
-        bool: True if compatible, False otherwise
-
-    Explanation:
-        This function uses pandas dtype 'kind' codes to map Python types to
-        pandas data types (e.g. 'i' for integer, 'f' for float, etc).
+    Returns True if pandas Series dtype matches expected_dtype (int, float, str, bool).
+    Accepts small numeric type mismatches (e.g., int64 vs int32).
     """
     kind = series.dtype.kind
     if expected_dtype == "int":
@@ -44,8 +41,6 @@ def _is_dtype_compatible(series, expected_dtype: str) -> bool:
         return kind == "b"
     return False
 
-# _validate_column
-
 
 def _validate_column(
     df: pd.DataFrame,
@@ -54,26 +49,8 @@ def _validate_column(
     warnings: List[str],
     report: Dict[str, Any]
 ) -> None:
-    """
-    Validates a single column of the DataFrame according to schema rules.
-
-    Args:
-        df: pandas DataFrame to validate
-        col_schema: Schema dictionary for this column
-        errors: List to collect error messages
-        warnings: List to collect warning messages
-        report: Dict for storing per-column validation details
-
-    Educational Notes:
-        - Checks for column presence, type, missing values, min/max bounds,
-          and allowed values (as configured).
-        - Stops further checks if dtype mismatch is detected.
-        - Populates a report dictionary for later inspection or audit.
-    """
     col = col_schema["name"]
     col_report = {}
-
-    # Check if the column is present in the DataFrame
     if col not in df.columns:
         if col_schema.get("required", True):
             msg = f"Missing required column: {col}"
@@ -88,7 +65,7 @@ def _validate_column(
     col_series = df[col]
     col_report["status"] = "present"
 
-    # Type check: Stop further validation if dtype does not match
+    # Type check
     dtype_expected = col_schema.get("dtype")
     if dtype_expected and not _is_dtype_compatible(col_series, dtype_expected):
         msg = f"Column '{col}' has dtype '{col_series.dtype}', expected '{dtype_expected}'"
@@ -96,8 +73,6 @@ def _validate_column(
         col_report["dtype"] = str(col_series.dtype)
         col_report["dtype_expected"] = dtype_expected
         col_report["error"] = msg
-        report[col] = col_report
-        return  # Don't run further checks to avoid pandas TypeError
 
     # Missing values check
     missing_count = col_series.isnull().sum()
@@ -110,7 +85,7 @@ def _validate_column(
             warnings.append(msg)
         col_report["missing_count"] = int(missing_count)
 
-    # Minimum value check (if configured)
+    # Value checks: min, max, allowed_values
     if "min" in col_schema:
         min_val = col_schema["min"]
         below = (col_series < min_val).sum()
@@ -118,8 +93,6 @@ def _validate_column(
             msg = f"Column '{col}' has {below} values below min ({min_val})"
             errors.append(msg)
             col_report["below_min"] = int(below)
-
-    # Maximum value check (if configured)
     if "max" in col_schema:
         max_val = col_schema["max"]
         above = (col_series > max_val).sum()
@@ -127,8 +100,6 @@ def _validate_column(
             msg = f"Column '{col}' has {above} values above max ({max_val})"
             errors.append(msg)
             col_report["above_max"] = int(above)
-
-    # Allowed values check (if configured)
     if "allowed_values" in col_schema:
         allowed = set(col_schema["allowed_values"])
         invalid = ~col_series.isin(allowed)
@@ -138,7 +109,7 @@ def _validate_column(
             errors.append(msg)
             col_report["invalid_values_count"] = int(n_invalid)
 
-    # Sample values (for report)
+    # Value distribution for report
     try:
         col_report["sample_values"] = col_series.dropna().unique()[:5].tolist()
     except Exception:
@@ -146,34 +117,23 @@ def _validate_column(
 
     report[col] = col_report
 
-# validate_data
-
 
 def validate_data(
     df: pd.DataFrame,
     config: Dict[str, Any]
 ) -> None:
     """
-    Run full data validation as per config.yaml rules.
+    Run full data validation as per config.yaml rules
 
     Args:
         df: DataFrame to validate
-        config: Full config dict (expects config['data_validation'])
+        config: full config dict (expects config['data_validation'])
 
-    Behavior:
-        - Loads schema and error behavior from config
-        - Calls _validate_column for each column in schema
-        - Writes a validation report as a JSON artifact
-        - Raises or warns depending on configuration
-
-    Educational Notes:
-        This function is the main entry point for data validation in MLOps pipelines.
-        It enforces data contracts at the earliest possible stage, which is a critical
-        production and compliance best practice.
+    Saves validation report as artifact. Raises or warns depending on config.
     """
     dv_cfg = config.get("data_validation", {})
-    if not dv_cfg.get("enabled", True):
-        dv_cfg["enabled"] = True
+    enabled = dv_cfg.get("enabled", True)
+    if not enabled:
         logger.info("Data validation is disabled in config.")
         return
 
@@ -188,28 +148,21 @@ def validate_data(
     errors, warnings = [], []
     report = {}
 
-    # Validate each column according to the schema
+    # Validate each column as per schema
     for col_schema in schema:
         _validate_column(df, col_schema, errors, warnings, report)
 
-    # Write validation report as a JSON artifact before any error is raised or warning is logged
-    report_path = Path(report_path)
-    if report_path.parent != Path():
-        report_path.parent.mkdir(parents=True, exist_ok=True)
+    # Save validation report (teaching: critical for reproducibility & audits)
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+    with open(report_path, "w") as f:
+        json.dump({
+            "result": "fail" if errors else "pass",
+            "errors": errors,
+            "warnings": warnings,
+            "details": report
+        }, f, indent=2)
 
-    with report_path.open("w") as f:
-        json.dump(
-            {
-                "result": "fail" if errors else "pass",
-                "errors": errors,
-                "warnings": warnings,
-                "details": report,
-            },
-            f,
-            indent=2,
-        )
-
-    # Logging for transparency and debugging
+    # Log summary
     if errors:
         logger.error(
             f"Data validation failed with {len(errors)} errors. See {report_path}")
@@ -220,30 +173,26 @@ def validate_data(
         for w in warnings:
             logger.warning(w)
 
-    # Behavior: Strict in production, more relaxed in research
+    # Teaching: You want strict validation in prod, warnings for research
     if errors:
         if action_on_error == "raise":
-            # Report has already been written
             raise ValueError(
-                f"Data validation failed with errors. See {report_path} for details")
+                f"Data validation failed with errors. See {report_path} for details"
+            )
         elif action_on_error == "warn":
             logger.warning(
-                "Data validation errors detected but proceeding as per config.")
+                "Data validation errors detected but proceeding as per config."
+            )
         else:
             logger.warning(
-                f"Unknown action_on_error '{action_on_error}'. Proceeding but data may be invalid.")
+                f"Unknown action_on_error '{action_on_error}'. Proceeding but data may be invalid."
+            )
     else:
         logger.info(f"Data validation passed. Details saved to {report_path}")
 
 
-# CLI support for running as a script
+# CLI support (optional)
 if __name__ == "__main__":
-    """
-    Optional CLI entry point for validating a CSV with a YAML config from the command line.
-
-    Usage:
-        python -m src.data_validation.data_validator <data.csv> <config.yaml>
-    """
     import sys
     import yaml
     logging.basicConfig(
@@ -252,7 +201,7 @@ if __name__ == "__main__":
     )
     if len(sys.argv) < 3:
         logger.error(
-            "Usage: python -m src.data_validation.data_validator <data.csv> <config.yaml>")
+            "Usage: python -m src.data_validation.data_validation <data.csv> <config.yaml>")
         sys.exit(1)
     data_path, config_path = sys.argv[1], sys.argv[2]
     df = pd.read_csv(data_path)
