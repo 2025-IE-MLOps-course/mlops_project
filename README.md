@@ -15,13 +15,6 @@ This repository provides a modular, **production-quality** MLOps pipeline for bi
 - Robust configuration via `config.yaml` and reproducibility through explicit artifact management
 - Extensive unit testing with pytest
 - Strict adherence to software engineering and MLOps best practices
-
-**Planned Phase 2: Automation and Full MLOps Integration**
-- Experiment tracking with MLflow and/or Weights & Biases (W&B)
-- Automated CI/CD using GitHub Actions
-- Dynamic configuration with Hydra
-- End-to-end workflow orchestration
-
 ---
 
 ## 📁 Repository Structure
